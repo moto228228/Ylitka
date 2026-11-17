@@ -36,8 +36,7 @@
 
   canvas {
     display: block;
-    box-shadow: 0 0 30px rgba(0,0,0,0.8);
-    background: #a8d86b;
+    background: #1e2c1e; /* Темный фон для сетки */
     border-radius: 10px;
   }
 
@@ -101,7 +100,6 @@
 </head>
 <body>
 <div id="game-container">
-  <!-- Убрал жесткие размеры, теперь они задаются скриптом -->
   <canvas id="game"></canvas>
 
   <div id="hud">
@@ -137,44 +135,20 @@
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-let W = 600, H = 600; // Базовая ширина, поменяется скриптом
-
-// Функция адаптации канваса
-function resizeCanvas() {
-  const wrap = document.getElementById('game-container');
-  const hudH = 70; // Высота верхней панели
-  const dpadH = 200; // Высота кнопок внизу
-  
-  // Доступная ширина и высота
-  const availW = window.innerWidth - 20;
-  const availH = window.innerHeight - hudH - (isTouch ? dpadH : 20);
-  
-  // Делаем квадратным
-  const size = Math.min(availW, availH);
-  
-  // Внутреннее разрешение канваса
-  W = size;
-  H = size;
-  canvas.width = W;
-  canvas.height = H;
-  
-  // Внешний вид
-  canvas.style.width = size + 'px';
-  canvas.style.height = size + 'px';
-}
-
-const GRID = 40;
+let W = 600, H = 600; // Задаем базовые, потом изменим скриптом
+let GRID = 40;
 
 let gameState = 'playing';
 let level = 1;
 let score = 0;
 let lives = 3;
+let lastTime = 0;
 
-let world = { w: W, h: H };
+let world = { w: 600, h: 600 };
 let camera = { x: 0, y: 0 };
 
 const snail = {
-  x: W/2, y: H/2, r: 15, 
+  x: 300, y: 300, r: 15, 
   dir: { x: 1, y: 0 },
   nextDir: { x: 1, y: 0 },
   baseSpeed: 150,
@@ -191,12 +165,28 @@ const TRASH_TYPES = ['banana', 'can', 'bottle', 'paper', 'apple'];
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 if (isTouch) document.getElementById('dpad').classList.add('active');
 
-window.addEventListener('resize', () => {
-  resizeCanvas();
-  // Если карта меньше экрана, центрируем её
-  if (world.w < W) world.w = W;
-  if (world.h < H) world.h = H;
-});
+// ТЕПЕРЬ ФУНКЦИЯ РАЗМЕРА РАБОТАЕТ ИДЕАЛЬНО
+function resizeCanvas() {
+  const wrap = document.getElementById('game-container');
+  const hudH = 70; 
+  const dpadH = isTouch ? 180 : 20; 
+  
+  const availW = window.innerWidth - 20;
+  const availH = window.innerHeight - hudH - dpadH;
+  
+  // Канвас всегда квадратный
+  const size = Math.min(availW, availH);
+  
+  W = size;
+  H = size;
+  canvas.width = W;
+  canvas.height = H;
+  
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+}
+
+window.addEventListener('resize', resizeCanvas);
 
 function setDir(dx, dy) {
   if (snail.dir.x === -dx && snail.dir.y === -dy) return;
@@ -231,7 +221,7 @@ function spawnEntity(type) {
   while (!valid && attempts < 100) {
     x = 40 + Math.random() * (world.w - 80);
     y = 40 + Math.random() * (world.h - 80);
-    if (Math.hypot(x - snail.x, y - snail.y) > 200) valid = true;
+    if (Math.hypot(x - snail.x, y - snail.y) > 150) valid = true;
     attempts++;
   }
 
@@ -242,7 +232,7 @@ function spawnEntity(type) {
       wobble: Math.random() * Math.PI * 2
     });
   } else {
-    const speed = 80 + (level * 15);
+    const speed = 70 + (level * 10);
     const angle = Math.random() * Math.PI * 2;
     enemies.push({
       x, y, r: 16,
@@ -259,9 +249,9 @@ function startLevel() {
   document.getElementById('gameover').classList.remove('show');
   document.getElementById('hud-level').textContent = `Уровень: ${level}`;
   
-  // УВЕЛИЧИВАЕМ КАРТУ, но стартуем от размера экрана
-  world.w = Math.min(W * 3, W + (level - 1) * 200);
-  world.h = Math.min(H * 3, H + (level - 1) * 200);
+  // Карта больше, чем экран
+  world.w = W + (level - 1) * 200;
+  world.h = H + (level - 1) * 200;
 
   snail.x = world.w / 2; 
   snail.y = world.h / 2;
@@ -273,10 +263,10 @@ function startLevel() {
   enemies = [];
   particles = [];
   
-  const trashCount = 10 + (level * 2);
+  const trashCount = 8 + (level * 2);
   for (let i = 0; i < trashCount; i++) spawnEntity('trash');
   
-  const enemyCount = 3 + Math.floor(level * 1.5);
+  const enemyCount = 2 + Math.floor(level * 1.5);
   for (let i = 0; i < enemyCount; i++) spawnEntity('enemy');
   
   updateHUD();
@@ -425,13 +415,16 @@ function update(dt) {
 }
 
 function draw() {
+  // Очищаем экран темным цветом
   ctx.fillStyle = '#1e2c1e';
   ctx.fillRect(0, 0, W, H);
 
+  // Двигаем камеру
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  // Сетка
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   ctx.lineWidth = 1;
   const startX = Math.floor(camera.x / GRID) * GRID;
   const startY = Math.floor(camera.y / GRID) * GRID;
@@ -442,52 +435,40 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + W, y); ctx.stroke();
   }
 
+  // Граница
   ctx.strokeStyle = '#ff4a4a';
   ctx.lineWidth = 6;
   ctx.strokeRect(0, 0, world.w, world.h);
 
+  // Мусор
   for (const t of trash) {
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.rotate(Math.sin(t.wobble) * 0.2);
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = 'rgba(255,255,255,0.5)';
-    
-    if (t.type === 'banana') {
-      ctx.fillStyle = '#FFD93B'; ctx.beginPath(); ctx.arc(0, 0, t.r, 0.2, Math.PI - 0.2); ctx.fill();
-    } else if (t.type === 'can') {
-      ctx.fillStyle = '#C0C0C0'; ctx.fillRect(-t.r*0.7, -t.r, t.r*1.4, t.r*2);
-    } else if (t.type === 'bottle') {
-      ctx.fillStyle = 'rgba(100, 200, 150, 0.9)'; ctx.fillRect(-t.r*0.5, -t.r, t.r, t.r*2);
-    } else if (t.type === 'paper') {
-      ctx.fillStyle = '#F5F5DC'; ctx.fillRect(-t.r, -t.r, t.r*2, t.r*1.5);
-    } else if (t.type === 'apple') {
-      ctx.fillStyle = '#E8342A'; ctx.beginPath(); ctx.arc(0, 0, t.r*0.8, 0, Math.PI*2); ctx.fill();
-    }
+    if (t.type === 'banana') { ctx.fillStyle = '#FFD93B'; ctx.beginPath(); ctx.arc(0, 0, t.r, 0.2, Math.PI - 0.2); ctx.fill(); } 
+    else if (t.type === 'can') { ctx.fillStyle = '#C0C0C0'; ctx.fillRect(-t.r*0.7, -t.r, t.r*1.4, t.r*2); } 
+    else if (t.type === 'bottle') { ctx.fillStyle = 'rgba(100, 200, 150, 0.9)'; ctx.fillRect(-t.r*0.5, -t.r, t.r, t.r*2); } 
+    else if (t.type === 'paper') { ctx.fillStyle = '#F5F5DC'; ctx.fillRect(-t.r, -t.r, t.r*2, t.r*1.5); } 
+    else if (t.type === 'apple') { ctx.fillStyle = '#E8342A'; ctx.beginPath(); ctx.arc(0, 0, t.r*0.8, 0, Math.PI*2); ctx.fill(); }
     ctx.restore();
   }
 
+  // Враги
   for (const e of enemies) {
     ctx.save();
     ctx.translate(e.x, e.y);
-    ctx.shadowBlur = 15; ctx.shadowColor = '#ff4a4a';
-    
     ctx.fillStyle = '#ff4a4a';
     ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI*2); ctx.fill();
-    
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(-5, -5, 4, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(5, -5, 4, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.arc(-5, -5, 2, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(5, -5, 2, 0, Math.PI*2); ctx.fill();
-    
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(-9, -11); ctx.lineTo(-2, -8); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(9, -11); ctx.lineTo(2, -8); ctx.stroke();
     ctx.restore();
   }
 
+  // Улитка
   ctx.save();
   ctx.translate(snail.x, snail.y);
   
@@ -498,16 +479,12 @@ function draw() {
   const angle = Math.atan2(snail.dir.y, snail.dir.x) + Math.PI/2;
   ctx.rotate(angle);
   
-  ctx.fillStyle = 'rgba(255,255,255,0.2)';
-  ctx.beginPath(); ctx.ellipse(0, 12, snail.r*0.8, snail.r*1.2, 0, 0, Math.PI*2); ctx.fill();
-
   ctx.fillStyle = '#B5D46E';
   ctx.beginPath(); ctx.ellipse(0, 0, snail.r, snail.r*0.8, 0, 0, Math.PI*2); ctx.fill();
   
   ctx.fillStyle = '#D4A35A';
   ctx.beginPath(); ctx.arc(0, 2, snail.r*0.8, 0, Math.PI*2); ctx.fill();
   ctx.strokeStyle = '#8B6914'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.beginPath(); ctx.arc(0, 2, snail.r*0.4, 0, Math.PI*2); ctx.stroke();
   
   ctx.fillStyle = '#B5D46E';
   ctx.beginPath(); ctx.arc(-5, -snail.r*0.8, 4, 0, Math.PI*2); ctx.fill();
@@ -515,14 +492,9 @@ function draw() {
   ctx.fillStyle = '#222';
   ctx.beginPath(); ctx.arc(-5, -snail.r*0.8 - 1, 2, 0, Math.PI*2); ctx.fill();
   ctx.beginPath(); ctx.arc(5, -snail.r*0.8 - 1, 2, 0, Math.PI*2); ctx.fill();
-
-  if (snail.pickupMult > 1) {
-    ctx.strokeStyle = `rgba(135, 206, 235, ${0.3 + Math.sin(Date.now()/200)*0.2})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(0, 0, snail.r * (1 + snail.pickupMult), 0, Math.PI * 2); ctx.stroke();
-  }
   ctx.restore();
 
+  // Частицы
   for (const p of particles) {
     ctx.globalAlpha = p.life;
     ctx.fillStyle = p.color;
@@ -530,7 +502,8 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  ctx.restore();
+  ctx.restore(); // Возвращаем камеру на место
+  
   drawMinimap();
 }
 
@@ -584,16 +557,16 @@ function startGame() {
   snail.speedMult = 1.0;
   snail.pickupMult = 1.0;
   
-  // Подгоняем размер
-  resizeCanvas();
-  
+  resizeCanvas(); // Подгоняем размер перед стартом
   startLevel();
 }
 
-// Запускаем
-resizeCanvas();
-startGame();
-requestAnimationFrame(loop);
+// ВАЖНО: Ждем полной загрузки DOM
+window.addEventListener('load', () => {
+  resizeCanvas();
+  startGame();
+  requestAnimationFrame(loop);
+});
 </script>
 </body>
 </html>
