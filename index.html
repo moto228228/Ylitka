@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>🐌 Улитка: Эволюция</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #1a1a1a;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    user-select: none; touch-action: none;
+    color: #fff;
+  }
+  #game-container {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  
+  #hud {
+    position: absolute; top: 10px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between;
+    font-size: 16px; font-weight: bold;
+    pointer-events: none; z-index: 10;
+  }
+  .hud-box {
+    background: rgba(0,0,0,0.6); padding: 8px 14px; border-radius: 10px;
+    border: 2px solid #4a7c2a;
+  }
+  #hud-level { color: #FFD700; }
+  #hud-score { color: #87CEEB; }
+  #hud-lives { color: #ff4a4a; font-size: 18px; }
+
+  canvas {
+    display: block;
+    background: #1e2c1e; /* Темный фон для сетки */
+    border-radius: 10px;
+  }
+
+  #dpad {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    width: 160px; height: 160px;
+    display: none;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 4px; z-index: 10;
+  }
+  #dpad.active { display: grid; }
+  .d-btn {
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.4);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; color: #fff; touch-action: none;
+  }
+  .d-btn:active { background: rgba(255,255,255,0.4); }
+  .d-up { grid-area: 1 / 2; }
+  .d-left { grid-area: 2 / 1; }
+  .d-right { grid-area: 2 / 3; }
+  .d-down { grid-area: 3 / 2; }
+
+  .modal {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 20; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    padding: 20px;
+  }
+  .modal.show { opacity: 1; pointer-events: auto; }
+  .modal h2 { margin: 0 0 10px; color: #FFD700; font-size: 26px; text-align: center; }
+  .modal p { margin: 5px 0; font-size: 16px; text-align: center; }
+  
+  #shop { background: rgba(20, 30, 20, 0.95); }
+  .shop-items { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 400px; margin: 15px 0; }
+  .shop-item {
+    background: #2a3a2a; border: 2px solid #4a7c2a; border-radius: 12px;
+    padding: 12px; display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; transition: transform 0.1s;
+  }
+  .shop-item:active { transform: scale(0.98); }
+  .shop-item.disabled { opacity: 0.5; pointer-events: none; }
+  .shop-item-info { text-align: left; }
+  .shop-item-title { font-weight: bold; font-size: 16px; color: #fff; }
+  .shop-item-desc { font-size: 12px; color: #aaa; margin-top: 2px; }
+  .shop-item-price { font-weight: bold; font-size: 16px; color: #FFD700; }
+  
+  button {
+    padding: 12px 24px; font-size: 18px; font-weight: bold;
+    background: #4a7c2a; color: white; border: none; border-radius: 12px;
+    cursor: pointer; margin-top: 10px; width: 100%; max-width: 400px;
+  }
+  button:active { background: #5f9a37; }
+
+  #damage-overlay {
+    position: fixed; inset: 0; background: rgba(255,0,0,0.4);
+    pointer-events: none; opacity: 0; z-index: 15;
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div class="hud-box" id="hud-level">Уровень: 1</div>
+    <div class="hud-box" id="hud-score">Мусор: 0</div>
+    <div class="hud-box" id="hud-lives">❤️❤️❤️</div>
+  </div>
+
+  <div id="dpad">
+    <div class="d-btn d-up" data-dir="up">▲</div>
+    <div class="d-btn d-left" data-dir="left">◀</div>
+    <div class="d-btn d-right" data-dir="right">▶</div>
+    <div class="d-btn d-down" data-dir="down">▼</div>
+  </div>
+
+  <div id="shop" class="modal">
+    <h2>🛒 Магазин улучшений</h2>
+    <p>Уровень <span id="shop-level">1</span> пройден!</p>
+    <p>У тебя очков: <span id="shop-score" style="color:#FFD700; font-weight:bold;">0</span></p>
+    <div class="shop-items" id="shop-items-container"></div>
+    <button id="btn-next-level">Вперед на следующий уровень! ▶</button>
+  </div>
+
+  <div id="gameover" class="modal">
+    <h2>💀 Игра окончена</h2>
+    <p>Ты дошел до уровня <span id="final-level" style="color:#FFD700; font-size:20px;">1</span></p>
+    <p>Собрано мусора: <span id="final-score" style="color:#87CEEB; font-size:20px;">0</span></p>
+    <button onclick="startGame()">Начать заново 🔄</button>
+  </div>
+</div>
+<div id="damage-overlay"></div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 600, H = 600; // Задаем базовые, потом изменим скриптом
+let GRID = 40;
+
+let gameState = 'playing';
+let level = 1;
+let score = 0;
+let lives = 3;
+let lastTime = 0;
+
+let world = { w: 600, h: 600 };
+let camera = { x: 0, y: 0 };
+
+const snail = {
+  x: 300, y: 300, r: 15, 
+  dir: { x: 1, y: 0 },
+  nextDir: { x: 1, y: 0 },
+  baseSpeed: 150,
+  speedMult: 1.0,
+  pickupMult: 1.0,
+  invuln: 0
+};
+
+let trash = [];
+let enemies = [];
+let particles = [];
+const TRASH_TYPES = ['banana', 'can', 'bottle', 'paper', 'apple'];
+
+const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+if (isTouch) document.getElementById('dpad').classList.add('active');
+
+// ТЕПЕРЬ ФУНКЦИЯ РАЗМЕРА РАБОТАЕТ ИДЕАЛЬНО
+function resizeCanvas() {
+  const wrap = document.getElementById('game-container');
+  const hudH = 70; 
+  const dpadH = isTouch ? 180 : 20; 
+  
+  const availW = window.innerWidth - 20;
+  const availH = window.innerHeight - hudH - dpadH;
+  
+  // Канвас всегда квадратный
+  const size = Math.min(availW, availH);
+  
+  W = size;
+  H = size;
+  canvas.width = W;
+  canvas.height = H;
+  
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+function setDir(dx, dy) {
+  if (snail.dir.x === -dx && snail.dir.y === -dy) return;
+  snail.nextDir = { x: dx, y: dy };
+}
+
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'arrowup' || k === 'w' || k === 'ц') setDir(0, -1);
+  if (k === 'arrowdown' || k === 's' || k === 'ы') setDir(0, 1);
+  if (k === 'arrowleft' || k === 'a' || k === 'ф') setDir(-1, 0);
+  if (k === 'arrowright' || k === 'd' || k === 'в') setDir(1, 0);
+  if ([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
+});
+
+document.querySelectorAll('.d-btn').forEach(btn => {
+  const handleInput = (e) => {
+    e.preventDefault();
+    const dir = btn.dataset.dir;
+    if (dir === 'up') setDir(0, -1);
+    if (dir === 'down') setDir(0, 1);
+    if (dir === 'left') setDir(-1, 0);
+    if (dir === 'right') setDir(1, 0);
+  };
+  btn.addEventListener('touchstart', handleInput, { passive: false });
+  btn.addEventListener('mousedown', handleInput);
+});
+
+function spawnEntity(type) {
+  let x, y, valid = false;
+  let attempts = 0;
+  while (!valid && attempts < 100) {
+    x = 40 + Math.random() * (world.w - 80);
+    y = 40 + Math.random() * (world.h - 80);
+    if (Math.hypot(x - snail.x, y - snail.y) > 150) valid = true;
+    attempts++;
+  }
+
+  if (type === 'trash') {
+    trash.push({
+      x, y, r: 12,
+      type: TRASH_TYPES[Math.floor(Math.random() * TRASH_TYPES.length)],
+      wobble: Math.random() * Math.PI * 2
+    });
+  } else {
+    const speed = 70 + (level * 10);
+    const angle = Math.random() * Math.PI * 2;
+    enemies.push({
+      x, y, r: 16,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      speed: speed
+    });
+  }
+}
+
+function startLevel() {
+  gameState = 'playing';
+  document.getElementById('shop').classList.remove('show');
+  document.getElementById('gameover').classList.remove('show');
+  document.getElementById('hud-level').textContent = `Уровень: ${level}`;
+  
+  // Карта больше, чем экран
+  world.w = W + (level - 1) * 200;
+  world.h = H + (level - 1) * 200;
+
+  snail.x = world.w / 2; 
+  snail.y = world.h / 2;
+  snail.dir = { x: 1, y: 0 };
+  snail.nextDir = { x: 1, y: 0 };
+  snail.invuln = 1;
+  
+  trash = [];
+  enemies = [];
+  particles = [];
+  
+  const trashCount = 8 + (level * 2);
+  for (let i = 0; i < trashCount; i++) spawnEntity('trash');
+  
+  const enemyCount = 2 + Math.floor(level * 1.5);
+  for (let i = 0; i < enemyCount; i++) spawnEntity('enemy');
+  
+  updateHUD();
+}
+
+function updateHUD() {
+  document.getElementById('hud-score').textContent = `Мусор: ${score}`;
+  let hearts = '';
+  for(let i=0; i<3; i++) hearts += (i < lives) ? '❤️' : '🖤';
+  document.getElementById('hud-lives').innerHTML = hearts;
+}
+
+const shopItems = [
+  { id: 'speed', title: '⚡ Скорость', desc: '+15% к скорости передвижения', basePrice: 10, priceMult: 1.5 },
+  { id: 'magnet', title: '🧲 Магнит', desc: 'Собирает мусор на расстоянии', basePrice: 15, priceMult: 1.5 },
+  { id: 'life', title: '❤️ Доп. жизнь', desc: 'Восстанавливает 1 жизнь', basePrice: 20, priceMult: 2.0 },
+  { id: 'freeze', title: '❄️ Заморозка', desc: 'Враги медленнее на 20%', basePrice: 12, priceMult: 1.5 }
+];
+
+function showShop() {
+  gameState = 'shop';
+  document.getElementById('shop-level').textContent = level;
+  document.getElementById('shop-score').textContent = score;
+  
+  const container = document.getElementById('shop-items-container');
+  container.innerHTML = '';
+  
+  shopItems.forEach(item => {
+    let price = Math.floor(item.basePrice * Math.pow(item.priceMult, level - 1));
+    const btn = document.createElement('div');
+    btn.className = 'shop-item' + (score < price ? ' disabled' : '');
+    btn.innerHTML = `
+      <div class="shop-item-info">
+        <div class="shop-item-title">${item.title}</div>
+        <div class="shop-item-desc">${item.desc}</div>
+      </div>
+      <div class="shop-item-price">${price} 🗑️</div>
+    `;
+    
+    btn.onclick = () => {
+      if (score >= price) {
+        score -= price;
+        updateHUD();
+        
+        if (item.id === 'speed') snail.speedMult += 0.15;
+        if (item.id === 'magnet') snail.pickupMult += 0.3;
+        if (item.id === 'life') { if(lives < 5) lives++; }
+        if (item.id === 'freeze') { enemies.forEach(e => { e.speed *= 0.8; e.vx *= 0.8; e.vy *= 0.8; }); }
+        
+        showShop();
+      }
+    };
+    container.appendChild(btn);
+  });
+}
+
+document.getElementById('btn-next-level').onclick = () => {
+  level++;
+  startLevel();
+};
+
+function update(dt) {
+  if (gameState !== 'playing') return;
+
+  if (snail.nextDir.x !== 0 || snail.nextDir.y !== 0) {
+    snail.dir = { ...snail.nextDir };
+  }
+  
+  const speed = snail.baseSpeed * snail.speedMult;
+  snail.x += snail.dir.x * speed * dt;
+  snail.y += snail.dir.y * speed * dt;
+
+  if (snail.x < snail.r) { snail.x = snail.r; snail.dir = {x: 1, y: 0}; }
+  if (snail.x > world.w - snail.r) { snail.x = world.w - snail.r; snail.dir = {x: -1, y: 0}; }
+  if (snail.y < snail.r) { snail.y = snail.r; snail.dir = {x: 0, y: 1}; }
+  if (snail.y > world.h - snail.r) { snail.y = world.h - snail.r; snail.dir = {x: 0, y: -1}; }
+
+  camera.x = snail.x - W / 2;
+  camera.y = snail.y - H / 2;
+  camera.x = Math.max(0, Math.min(world.w - W, camera.x));
+  camera.y = Math.max(0, Math.min(world.h - H, camera.y));
+
+  if (snail.invuln > 0) snail.invuln -= dt;
+
+  for (let i = trash.length - 1; i >= 0; i--) {
+    const t = trash[i];
+    t.wobble += dt * 5;
+    
+    const pickupRadius = (snail.r + t.r) * (1 + snail.pickupMult);
+    if (Math.hypot(t.x - snail.x, t.y - snail.y) < pickupRadius) {
+      trash.splice(i, 1);
+      score++;
+      updateHUD();
+      for(let p=0; p<5; p++) particles.push({ x: t.x, y: t.y, vx: (Math.random()-0.5)*200, vy: (Math.random()-0.5)*200, life: 1, color: '#fff' });
+      
+      if (trash.length < 5) spawnEntity('trash');
+    }
+  }
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+
+    if (e.x < e.r || e.x > world.w - e.r) e.vx *= -1;
+    if (e.y < e.r || e.y > world.h - e.r) e.vy *= -1;
+    e.x = Math.max(e.r, Math.min(world.w - e.r, e.x));
+    e.y = Math.max(e.r, Math.min(world.h - e.r, e.y));
+
+    if (snail.invuln <= 0 && Math.hypot(e.x - snail.x, e.y - snail.y) < e.r + snail.r) {
+      lives--;
+      snail.invuln = 2.0;
+      updateHUD();
+
+      const overlay = document.getElementById('damage-overlay');
+      overlay.style.transition = 'none';
+      overlay.style.opacity = '1';
+      setTimeout(() => { overlay.style.transition = 'opacity 0.5s'; overlay.style.opacity = '0'; }, 50);
+
+      e.vx = (snail.x - e.x) * 5;
+      e.vy = (snail.y - e.y) * 5;
+
+      for(let p=0; p<15; p++) particles.push({ x: snail.x, y: snail.y, vx: (Math.random()-0.5)*300, vy: (Math.random()-0.5)*300, life: 1, color: '#ff4a4a' });
+
+      if (lives <= 0) {
+        gameState = 'gameover';
+        document.getElementById('final-level').textContent = level;
+        document.getElementById('final-score').textContent = score;
+        document.getElementById('gameover').classList.add('show');
+        return;
+      }
+    }
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt * 2;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  
+  if (gameState === 'playing' && trash.length === 0) {
+    showShop();
+  }
+}
+
+function draw() {
+  // Очищаем экран темным цветом
+  ctx.fillStyle = '#1e2c1e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Двигаем камеру
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+
+  // Сетка
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  const startX = Math.floor(camera.x / GRID) * GRID;
+  const startY = Math.floor(camera.y / GRID) * GRID;
+  for (let x = startX; x <= startX + W + GRID; x += GRID) {
+    ctx.beginPath(); ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + H); ctx.stroke();
+  }
+  for (let y = startY; y <= startY + H + GRID; y += GRID) {
+    ctx.beginPath(); ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + W, y); ctx.stroke();
+  }
+
+  // Граница
+  ctx.strokeStyle = '#ff4a4a';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(0, 0, world.w, world.h);
+
+  // Мусор
+  for (const t of trash) {
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(Math.sin(t.wobble) * 0.2);
+    if (t.type === 'banana') { ctx.fillStyle = '#FFD93B'; ctx.beginPath(); ctx.arc(0, 0, t.r, 0.2, Math.PI - 0.2); ctx.fill(); } 
+    else if (t.type === 'can') { ctx.fillStyle = '#C0C0C0'; ctx.fillRect(-t.r*0.7, -t.r, t.r*1.4, t.r*2); } 
+    else if (t.type === 'bottle') { ctx.fillStyle = 'rgba(100, 200, 150, 0.9)'; ctx.fillRect(-t.r*0.5, -t.r, t.r, t.r*2); } 
+    else if (t.type === 'paper') { ctx.fillStyle = '#F5F5DC'; ctx.fillRect(-t.r, -t.r, t.r*2, t.r*1.5); } 
+    else if (t.type === 'apple') { ctx.fillStyle = '#E8342A'; ctx.beginPath(); ctx.arc(0, 0, t.r*0.8, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore();
+  }
+
+  // Враги
+  for (const e of enemies) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    ctx.fillStyle = '#ff4a4a';
+    ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-5, -5, 4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -5, 4, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(-5, -5, 2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -5, 2, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Улитка
+  ctx.save();
+  ctx.translate(snail.x, snail.y);
+  
+  if (snail.invuln > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
+    ctx.globalAlpha = 0.3;
+  }
+
+  const angle = Math.atan2(snail.dir.y, snail.dir.x) + Math.PI/2;
+  ctx.rotate(angle);
+  
+  ctx.fillStyle = '#B5D46E';
+  ctx.beginPath(); ctx.ellipse(0, 0, snail.r, snail.r*0.8, 0, 0, Math.PI*2); ctx.fill();
+  
+  ctx.fillStyle = '#D4A35A';
+  ctx.beginPath(); ctx.arc(0, 2, snail.r*0.8, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#8B6914'; ctx.lineWidth = 2; ctx.stroke();
+  
+  ctx.fillStyle = '#B5D46E';
+  ctx.beginPath(); ctx.arc(-5, -snail.r*0.8, 4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(5, -snail.r*0.8, 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(-5, -snail.r*0.8 - 1, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(5, -snail.r*0.8 - 1, 2, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Частицы
+  for (const p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore(); // Возвращаем камеру на место
+  
+  drawMinimap();
+}
+
+function drawMinimap() {
+  const mapSize = 100;
+  const padding = 10;
+  const mapX = W - mapSize - padding;
+  const mapY = H - mapSize - padding;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(mapX, mapY, mapSize, mapSize);
+  ctx.strokeStyle = '#4a7c2a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(mapX, mapY, mapSize, mapSize);
+
+  const scaleX = mapSize / world.w;
+  const scaleY = mapSize / world.h;
+
+  ctx.fillStyle = '#fff';
+  for (const t of trash) {
+    ctx.fillRect(mapX + t.x * scaleX, mapY + t.y * scaleY, 2, 2);
+  }
+
+  ctx.fillStyle = '#ff4a4a';
+  for (const e of enemies) {
+    ctx.beginPath();
+    ctx.arc(mapX + e.x * scaleX, mapY + e.y * scaleY, 3, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#87CEEB';
+  ctx.beginPath();
+  ctx.arc(mapX + snail.x * scaleX, mapY + snail.y * scaleY, 4, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function loop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+  lastTime = timestamp;
+  
+  update(dt);
+  draw();
+  
+  requestAnimationFrame(loop);
+}
+
+function startGame() {
+  level = 1;
+  score = 0;
+  lives = 3;
+  snail.speedMult = 1.0;
+  snail.pickupMult = 1.0;
+  
+  resizeCanvas(); // Подгоняем размер перед стартом
+  startLevel();
+}
+
+// ВАЖНО: Ждем полной загрузки DOM
+window.addEventListener('load', () => {
+  resizeCanvas();
+  startGame();
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>
