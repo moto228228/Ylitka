@@ -20,7 +20,6 @@
     align-items: center; justify-content: center;
   }
   
-  /* HUD */
   #hud {
     position: absolute; top: 10px; left: 10px; right: 10px;
     display: flex; justify-content: space-between;
@@ -39,9 +38,9 @@
     display: block;
     box-shadow: 0 0 30px rgba(0,0,0,0.8);
     background: #a8d86b;
+    border-radius: 10px;
   }
 
-  /* Кнопки управления (Крестовина) */
   #dpad {
     position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
     width: 160px; height: 160px;
@@ -63,7 +62,6 @@
   .d-right { grid-area: 2 / 3; }
   .d-down { grid-area: 3 / 2; }
 
-  /* Модальные окна */
   .modal {
     position: absolute; inset: 0; background: rgba(0,0,0,0.85);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -74,7 +72,6 @@
   .modal h2 { margin: 0 0 10px; color: #FFD700; font-size: 26px; text-align: center; }
   .modal p { margin: 5px 0; font-size: 16px; text-align: center; }
   
-  /* Магазин */
   #shop { background: rgba(20, 30, 20, 0.95); }
   .shop-items { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 400px; margin: 15px 0; }
   .shop-item {
@@ -96,7 +93,6 @@
   }
   button:active { background: #5f9a37; }
 
-  /* Экран урона */
   #damage-overlay {
     position: fixed; inset: 0; background: rgba(255,0,0,0.4);
     pointer-events: none; opacity: 0; z-index: 15;
@@ -105,7 +101,8 @@
 </head>
 <body>
 <div id="game-container">
-  <canvas id="game" width="600" height="600"></canvas>
+  <!-- Убрал жесткие размеры, теперь они задаются скриптом -->
+  <canvas id="game"></canvas>
 
   <div id="hud">
     <div class="hud-box" id="hud-level">Уровень: 1</div>
@@ -140,47 +137,67 @@
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
-const GRID = 40; // Размер клетки
+let W = 600, H = 600; // Базовая ширина, поменяется скриптом
 
-// Состояние игры
-let gameState = 'playing'; // playing, shop, gameover
+// Функция адаптации канваса
+function resizeCanvas() {
+  const wrap = document.getElementById('game-container');
+  const hudH = 70; // Высота верхней панели
+  const dpadH = 200; // Высота кнопок внизу
+  
+  // Доступная ширина и высота
+  const availW = window.innerWidth - 20;
+  const availH = window.innerHeight - hudH - (isTouch ? dpadH : 20);
+  
+  // Делаем квадратным
+  const size = Math.min(availW, availH);
+  
+  // Внутреннее разрешение канваса
+  W = size;
+  H = size;
+  canvas.width = W;
+  canvas.height = H;
+  
+  // Внешний вид
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+}
+
+const GRID = 40;
+
+let gameState = 'playing';
 let level = 1;
 let score = 0;
 let lives = 3;
 
-// Карта и камера
 let world = { w: W, h: H };
 let camera = { x: 0, y: 0 };
 
-// Улитка
 const snail = {
   x: W/2, y: H/2, r: 15, 
-  dir: { x: 1, y: 0 }, // Начинает движение вправо
+  dir: { x: 1, y: 0 },
   nextDir: { x: 1, y: 0 },
   baseSpeed: 150,
   speedMult: 1.0,
   pickupMult: 1.0,
-  invuln: 0 // Неуязвимость после урона
+  invuln: 0
 };
 
 let trash = [];
 let enemies = [];
 let particles = [];
-
 const TRASH_TYPES = ['banana', 'can', 'bottle', 'paper', 'apple'];
-
-function resize() {
-  const size = Math.min(window.innerWidth - 20, window.innerHeight - 100);
-  canvas.style.width = size + 'px';
-  canvas.style.height = size + 'px';
-}
-window.addEventListener('resize', resize);
 
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 if (isTouch) document.getElementById('dpad').classList.add('active');
 
-// ====== УПРАВЛЕНИЕ ======
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  // Если карта меньше экрана, центрируем её
+  if (world.w < W) world.w = W;
+  if (world.h < H) world.h = H;
+});
+
 function setDir(dx, dy) {
   if (snail.dir.x === -dx && snail.dir.y === -dy) return;
   snail.nextDir = { x: dx, y: dy };
@@ -208,14 +225,12 @@ document.querySelectorAll('.d-btn').forEach(btn => {
   btn.addEventListener('mousedown', handleInput);
 });
 
-// ====== ГЕНЕРАЦИЯ ======
 function spawnEntity(type) {
   let x, y, valid = false;
   let attempts = 0;
   while (!valid && attempts < 100) {
     x = 40 + Math.random() * (world.w - 80);
     y = 40 + Math.random() * (world.h - 80);
-    // Не спавнить слишком близко к улитке
     if (Math.hypot(x - snail.x, y - snail.y) > 200) valid = true;
     attempts++;
   }
@@ -227,7 +242,6 @@ function spawnEntity(type) {
       wobble: Math.random() * Math.PI * 2
     });
   } else {
-    // Враги со временем становятся быстрее
     const speed = 80 + (level * 15);
     const angle = Math.random() * Math.PI * 2;
     enemies.push({
@@ -239,29 +253,26 @@ function spawnEntity(type) {
   }
 }
 
-// ====== УРОВНИ И МАГАЗИН ======
 function startLevel() {
   gameState = 'playing';
   document.getElementById('shop').classList.remove('show');
   document.getElementById('gameover').classList.remove('show');
   document.getElementById('hud-level').textContent = `Уровень: ${level}`;
   
-  // УВЕЛИЧИВАЕМ КАРТУ (растет с каждым уровнем, но не больше 3x экрана)
+  // УВЕЛИЧИВАЕМ КАРТУ, но стартуем от размера экрана
   world.w = Math.min(W * 3, W + (level - 1) * 200);
   world.h = Math.min(H * 3, H + (level - 1) * 200);
 
-  // Сброс позиции улитки в центр новой карты
   snail.x = world.w / 2; 
   snail.y = world.h / 2;
   snail.dir = { x: 1, y: 0 };
   snail.nextDir = { x: 1, y: 0 };
-  snail.invuln = 1; // 1 секунда неуязвимости на старте
+  snail.invuln = 1;
   
   trash = [];
   enemies = [];
   particles = [];
   
-  // Больше мусора и врагов
   const trashCount = 10 + (level * 2);
   for (let i = 0; i < trashCount; i++) spawnEntity('trash');
   
@@ -312,7 +323,7 @@ function showShop() {
         
         if (item.id === 'speed') snail.speedMult += 0.15;
         if (item.id === 'magnet') snail.pickupMult += 0.3;
-        if (item.id === 'life') { if(lives < 5) lives++; } // Максимум 5 жизней
+        if (item.id === 'life') { if(lives < 5) lives++; }
         if (item.id === 'freeze') { enemies.forEach(e => { e.speed *= 0.8; e.vx *= 0.8; e.vy *= 0.8; }); }
         
         showShop();
@@ -327,11 +338,9 @@ document.getElementById('btn-next-level').onclick = () => {
   startLevel();
 };
 
-// ====== ЛОГИКА ======
 function update(dt) {
   if (gameState !== 'playing') return;
 
-  // Движение улитки
   if (snail.nextDir.x !== 0 || snail.nextDir.y !== 0) {
     snail.dir = { ...snail.nextDir };
   }
@@ -340,22 +349,18 @@ function update(dt) {
   snail.x += snail.dir.x * speed * dt;
   snail.y += snail.dir.y * speed * dt;
 
-  // Ограничение мира (теперь это большая карта)
   if (snail.x < snail.r) { snail.x = snail.r; snail.dir = {x: 1, y: 0}; }
   if (snail.x > world.w - snail.r) { snail.x = world.w - snail.r; snail.dir = {x: -1, y: 0}; }
   if (snail.y < snail.r) { snail.y = snail.r; snail.dir = {x: 0, y: 1}; }
   if (snail.y > world.h - snail.r) { snail.y = world.h - snail.r; snail.dir = {x: 0, y: -1}; }
 
-  // Камера следует за улиткой (с ограничениями по краям карты)
   camera.x = snail.x - W / 2;
   camera.y = snail.y - H / 2;
   camera.x = Math.max(0, Math.min(world.w - W, camera.x));
   camera.y = Math.max(0, Math.min(world.h - H, camera.y));
 
-  // Таймер неуязвимости
   if (snail.invuln > 0) snail.invuln -= dt;
 
-  // Сбор мусора
   for (let i = trash.length - 1; i >= 0; i--) {
     const t = trash[i];
     t.wobble += dt * 5;
@@ -367,36 +372,30 @@ function update(dt) {
       updateHUD();
       for(let p=0; p<5; p++) particles.push({ x: t.x, y: t.y, vx: (Math.random()-0.5)*200, vy: (Math.random()-0.5)*200, life: 1, color: '#fff' });
       
-      // Если мусор закончился - спавним новый
       if (trash.length < 5) spawnEntity('trash');
     }
   }
 
-  // Враги
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     e.x += e.vx * dt;
     e.y += e.vy * dt;
 
-    // Отскок от стен
     if (e.x < e.r || e.x > world.w - e.r) e.vx *= -1;
     if (e.y < e.r || e.y > world.h - e.r) e.vy *= -1;
     e.x = Math.max(e.r, Math.min(world.w - e.r, e.x));
     e.y = Math.max(e.r, Math.min(world.h - e.r, e.y));
 
-    // Проверка столкновения с улиткой
     if (snail.invuln <= 0 && Math.hypot(e.x - snail.x, e.y - snail.y) < e.r + snail.r) {
       lives--;
-      snail.invuln = 2.0; // 2 секунды неуязвимости
+      snail.invuln = 2.0;
       updateHUD();
 
-      // Эффект экрана
       const overlay = document.getElementById('damage-overlay');
       overlay.style.transition = 'none';
       overlay.style.opacity = '1';
       setTimeout(() => { overlay.style.transition = 'opacity 0.5s'; overlay.style.opacity = '0'; }, 50);
 
-      // Отбрасываем врага
       e.vx = (snail.x - e.x) * 5;
       e.vy = (snail.y - e.y) * 5;
 
@@ -412,7 +411,6 @@ function update(dt) {
     }
   }
 
-  // Частицы
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.x += p.vx * dt;
@@ -420,26 +418,19 @@ function update(dt) {
     p.life -= dt * 2;
     if (p.life <= 0) particles.splice(i, 1);
   }
-}
-
-// Функция для перехода в магазин, когда весь мусор собран
-function checkLevelComplete() {
+  
   if (gameState === 'playing' && trash.length === 0) {
     showShop();
   }
 }
 
-// ====== ОТРИСОВКА ======
 function draw() {
-  // Очистка экрана
   ctx.fillStyle = '#1e2c1e';
   ctx.fillRect(0, 0, W, H);
 
-  // --- НАЧАЛО МИРА С УЧЕТОМ КАМЕРЫ ---
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
 
-  // Сетка (рисуем только видимую часть)
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
   ctx.lineWidth = 1;
   const startX = Math.floor(camera.x / GRID) * GRID;
@@ -451,12 +442,10 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + W, y); ctx.stroke();
   }
 
-  // Граница мира
   ctx.strokeStyle = '#ff4a4a';
   ctx.lineWidth = 6;
   ctx.strokeRect(0, 0, world.w, world.h);
 
-  // Мусор
   for (const t of trash) {
     ctx.save();
     ctx.translate(t.x, t.y);
@@ -478,7 +467,6 @@ function draw() {
     ctx.restore();
   }
 
-  // Враги
   for (const e of enemies) {
     ctx.save();
     ctx.translate(e.x, e.y);
@@ -500,11 +488,9 @@ function draw() {
     ctx.restore();
   }
 
-  // Улитка
   ctx.save();
   ctx.translate(snail.x, snail.y);
   
-  // Мигание при неуязвимости
   if (snail.invuln > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
     ctx.globalAlpha = 0.3;
   }
@@ -537,7 +523,6 @@ function draw() {
   }
   ctx.restore();
 
-  // Частицы
   for (const p of particles) {
     ctx.globalAlpha = p.life;
     ctx.fillStyle = p.color;
@@ -545,13 +530,8 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  ctx.restore(); // --- КОНЕЦ МИРА ---
-
-  // --- МИНИ-КАРТА ---
+  ctx.restore();
   drawMinimap();
-  
-  // Проверяем, не закончился ли уровень
-  checkLevelComplete();
 }
 
 function drawMinimap() {
@@ -560,7 +540,6 @@ function drawMinimap() {
   const mapX = W - mapSize - padding;
   const mapY = H - mapSize - padding;
 
-  // Фон карты
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(mapX, mapY, mapSize, mapSize);
   ctx.strokeStyle = '#4a7c2a';
@@ -570,13 +549,11 @@ function drawMinimap() {
   const scaleX = mapSize / world.w;
   const scaleY = mapSize / world.h;
 
-  // Мусор на карте
   ctx.fillStyle = '#fff';
   for (const t of trash) {
     ctx.fillRect(mapX + t.x * scaleX, mapY + t.y * scaleY, 2, 2);
   }
 
-  // Враги на карте
   ctx.fillStyle = '#ff4a4a';
   for (const e of enemies) {
     ctx.beginPath();
@@ -584,14 +561,12 @@ function drawMinimap() {
     ctx.fill();
   }
 
-  // Улитка на карте
   ctx.fillStyle = '#87CEEB';
   ctx.beginPath();
   ctx.arc(mapX + snail.x * scaleX, mapY + snail.y * scaleY, 4, 0, Math.PI*2);
   ctx.fill();
 }
 
-// ====== ЦИКЛ ======
 function loop(timestamp) {
   const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
   lastTime = timestamp;
@@ -608,10 +583,15 @@ function startGame() {
   lives = 3;
   snail.speedMult = 1.0;
   snail.pickupMult = 1.0;
+  
+  // Подгоняем размер
+  resizeCanvas();
+  
   startLevel();
 }
 
-resize();
+// Запускаем
+resizeCanvas();
 startGame();
 requestAnimationFrame(loop);
 </script>
